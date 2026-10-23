@@ -1,0 +1,16 @@
+.gradle/
+**/build/
+local.properties
+*.jks
+evidence/private/
+.emulator/
+release-signing.properties
+keystore/
+evidence/
+dist/
+promo/node_modules/
+promo/public/audio/
+promo/public/footage/
+promo/out/
+promo/*.log
+promo/voice-report.json

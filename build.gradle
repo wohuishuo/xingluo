@@ -1,0 +1,3 @@
+plugins { id 'com.android.application' version '9.4.0' apply false }
+def customBuildRoot = providers.gradleProperty('xingluoBuildDir').orNull
+if (customBuildRoot) allprojects { layout.buildDirectory = file("${customBuildRoot}/${project.name}") }
