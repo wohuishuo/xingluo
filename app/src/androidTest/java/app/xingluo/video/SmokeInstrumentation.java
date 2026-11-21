@@ -29,7 +29,10 @@ public final class SmokeInstrumentation extends Instrumentation {
             new Preferences(target).destination("gallery");
             check("quality and destination preferences persist",()->{Preferences p=new Preferences(target);p.quality(480);p.destination("downloads");Preferences restored=new Preferences(target);require(restored.quality()==480,"quality lost");require(restored.destination().equals("downloads"),"destination lost");p.quality(720);p.destination("gallery");});
             check("selected Download folder receives complete video",()->{Preferences p=new Preferences(target);p.destination("downloads");try{Uri u=MediaFiles.publish(target,sample,"下载目录验证",()->false);cleanup.add(u);try(Cursor c=target.getContentResolver().query(u,new String[]{"relative_path","_size","is_pending"},null,null,null)){require(c!=null&&c.moveToFirst(),"missing download");require(c.getString(0).equals("Download/星落/"),"wrong destination");require(c.getLong(1)==sample.length()&&c.getInt(2)==0,"incomplete download");}}finally{p.destination("gallery");}});
-            check("valid MP4 has video and duration",()->MediaFiles.validate(sample));
+            check("valid MP4 reports the fixture's actual dimensions",()->{
+                MediaFiles.VideoInfo info=MediaFiles.inspect(sample);
+                require(info.width()==160 && info.height()==160,"file dimensions do not match the fixture");
+            });
             check("HTML cannot masquerade as a video",()->{
                 File bad=new File(target.getCacheDir(),"invalid.mp4");try(FileOutputStream out=new FileOutputStream(bad)){out.write("<!doctype html><html>Access denied</html>".getBytes());}
                 try{MediaFiles.validate(bad);throw new AssertionError("HTML accepted");}catch(IOException expected){}finally{bad.delete();}
@@ -60,6 +63,8 @@ public final class SmokeInstrumentation extends Instrumentation {
                 Activity a=startActivitySync(share);waitForIdleSync();long deadline=System.currentTimeMillis()+20000;TaskStore.Task received=null;
                 while(System.currentTimeMillis()<deadline){for(TaskStore.Task t:s.all())if(t.direct.equals(fixture.toString()))received=t;if(received!=null&&!received.active())break;Thread.sleep(150);}
                 require(received!=null,"share did not submit");require(received.status.equals("done"),"automatic save failed: "+received.detail);cleanup.add(Uri.parse(received.uri));int after=s.all().size();require(after==before+1,"unexpected task count");
+                require(received.detail.contains("实际 160×160"),"collection omits the saved dimensions");
+                require(!received.detail.contains("低于首选"),"import was incorrectly compared with the download preference");
                 if(a!=null)runOnMainSync(a::recreate);waitForIdleSync();Thread.sleep(500);require(s.all().size()==after,"recreation downloaded twice");
             });
             check("text share begins without a second confirmation",()->{

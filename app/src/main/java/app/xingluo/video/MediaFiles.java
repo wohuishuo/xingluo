@@ -11,16 +11,36 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 public final class MediaFiles {
+    public record VideoInfo(int width,int height) {
+        public String resolutionLabel() {
+            return width+"×"+height+" · "+VideoQuality.shortSide(width,height)+"p";
+        }
+
+        public boolean belowPreference(int preferred) {
+            return preferred>0 && VideoQuality.shortSide(width,height)<preferred;
+        }
+    }
+
     public static void validate(File file) throws IOException {
+        inspect(file);
+    }
+
+    public static VideoInfo inspect(File file) throws IOException {
         MediaExtractor ex=new MediaExtractor();
         try {
-            ex.setDataSource(file.getAbsolutePath()); boolean video=false; long duration=0;
+            ex.setDataSource(file.getAbsolutePath());
             if(ex.getDrmInitData()!=null) throw new IOException("视频包含加密媒体，无法直接保存");
             for(int i=0;i<ex.getTrackCount();i++) {
                 MediaFormat f=ex.getTrackFormat(i);
-                if(Objects.toString(f.getString(MediaFormat.KEY_MIME),"").startsWith("video/")) { video=true; if(f.containsKey(MediaFormat.KEY_DURATION)) duration=f.getLong(MediaFormat.KEY_DURATION); }
+                if(!Objects.toString(f.getString(MediaFormat.KEY_MIME),"").startsWith("video/")
+                        || !f.containsKey(MediaFormat.KEY_DURATION) || f.getLong(MediaFormat.KEY_DURATION)<=0) continue;
+                int width=f.getInteger(MediaFormat.KEY_WIDTH,0);
+                int height=f.getInteger(MediaFormat.KEY_HEIGHT,0);
+                if(width<=0 || height<=0) continue;
+                int rotation=f.getInteger(MediaFormat.KEY_ROTATION,0);
+                return Math.floorMod(rotation,180)==90 ? new VideoInfo(height,width) : new VideoInfo(width,height);
             }
-            if(!video || duration<=0) throw new IOException("文件不是完整可播放的视频，已清理临时内容");
+            throw new IOException("文件不是完整可播放的视频，已清理临时内容");
         } catch(RuntimeException e) { throw new IOException("视频格式不受支持或文件已损坏",e); } finally { ex.release(); }
     }
     public static void mux(File video,File audio,File output,Net.Cancellation cancel) throws IOException {

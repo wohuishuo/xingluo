@@ -15,6 +15,7 @@ public final class DownloadService extends Service {
     private final ExecutorService queue=Executors.newSingleThreadExecutor();
     private final Set<String> cancelled=ConcurrentHashMap.newKeySet();
     private final AtomicInteger count=new AtomicInteger();
+    private record Downloaded(File file, MediaFiles.VideoInfo info) {}
     private TaskStore store; private int latestStart;
     public static void submit(Context c,String input) { submit(c,input,null,null,null); }
     public static void submit(Context c,String input,String media,String referer,String title) {
@@ -55,31 +56,50 @@ public final class DownloadService extends Service {
         Uri published=null;
         try {
             wake.acquire(30*60*1000L); Net.check(cancel);
-            File result=new File(dir,"video.mp4");
-            if(task.direct.startsWith("content://")) {
+            Downloaded downloaded;
+            boolean imported=task.direct.startsWith("content://");
+            int quality=imported?0:new Preferences(this).quality();
+            if(imported) {
+                File result=new File(dir,"video.mp4");
                 update(task,"downloading","正在把分享的视频放进收藏袋",-1);
                 try(InputStream in=getContentResolver().openInputStream(Uri.parse(task.direct));OutputStream out=new FileOutputStream(result)) {
                     if(in==null) throw new IOException("无法读取分享的视频"); byte[] b=new byte[131072];int n;long size=0;
                     while((n=in.read(b))!=-1) { Net.check(cancel); size+=n; if(size>4L*1024*1024*1024) throw new IOException("视频超过 4 GB"); out.write(b,0,n); }
                 }
                 if(task.title.equals("正在寻找视频…")) task.title="分享的视频";
+                downloaded=new Downloaded(result,MediaFiles.inspect(result));
             } else {
-                int quality=new Preferences(this).quality();
-                result=RetryPolicy.run(3,attempt->{
+                downloaded=RetryPolicy.run(3,attempt->{
                     Net.check(cancel);update(task,"resolving",attempt==1?"正在识别链接，寻找视频…":"第 "+attempt+" / 3 次尝试 · 正在重新解析原链接",-1);
                     MediaPlan plan=(attempt==1&&!task.direct.isEmpty())?MediaParser.checkedPlan(task.title,task.direct,task.referer):Resolver.resolve(task.input,cancel,quality);
                     task.title=plan.title==null||plan.title.isBlank()?"星落视频":plan.title;
-                    File obtained;
-                    try{obtained=fetchPlan(plan,dir,task,cancel);}catch(IOException firstFailure){
+                    try {
+                        File result=fetchPlan(plan,dir,task,cancel);
+                        return new Downloaded(result,MediaFiles.inspect(result));
+                    } catch(IOException firstFailure) {
                         if(LinkInput.platform(task.input)!=LinkInput.Platform.BILIBILI)throw firstFailure;
-                        Net.check(cancel);update(task,"resolving","换个方向，再接住它…",-1);obtained=fetchPlan(Resolver.alternative(task.input,cancel,quality),dir,task,cancel);
+                        Net.check(cancel);
+                        update(task,"resolving","正在尝试 B 站提供的其他视频格式…",-1);
+                        IOException lastFailure=firstFailure;
+                        for(MediaPlan alternative:Resolver.biliAlternatives(task.input,cancel,quality)) {
+                            if(alternative.videoUrls.equals(plan.videoUrls) && alternative.audioUrls.equals(plan.audioUrls)) continue;
+                            try {
+                                File result=fetchPlan(alternative,dir,task,cancel);
+                                return new Downloaded(result,MediaFiles.inspect(result));
+                            } catch(IOException e) { lastFailure=e; }
+                        }
+                        throw lastFailure;
                     }
-                    MediaFiles.validate(obtained);return obtained;
                 },cancel::cancelled,(next,error)->update(task,"resolving","暂时没接住，马上重新获取链接（"+next+" / 3）",-1),millis->{long end=System.currentTimeMillis()+millis;while(System.currentTimeMillis()<end){Net.check(cancel);Thread.sleep(100);}});
             }
-            update(task,"saving","最后一步，放进系统相册",97); task.bytes=result.length();
-            published=MediaFiles.publish(this,result,task.title,cancel);
-            Net.check(cancel); task.uri=published.toString(); update(task,"done","已保存 · "+new Preferences(this).locationLabel(),100);
+            update(task,"saving","正在写入保存位置",97); task.bytes=downloaded.file().length();
+            published=MediaFiles.publish(this,downloaded.file(),task.title,cancel);
+            Net.check(cancel);
+            task.uri=published.toString();
+            String detail="已保存 · "+new Preferences(this).locationLabel()
+                    +"\n实际 "+downloaded.info().resolutionLabel();
+            if(downloaded.info().belowPreference(quality)) detail+=" · 低于首选 "+quality+"p";
+            update(task,"done",detail,100);
             finishNotification(task,true);
         } catch(CancellationException e) {
             if(published!=null) getContentResolver().delete(published,null,null);

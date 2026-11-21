@@ -56,7 +56,7 @@ public final class BrowserActivity extends Activity {
         String ref=LinkInput.platform(original)==LinkInput.Platform.BILIBILI?"https://www.bilibili.com/":web.getUrl();
         DownloadService.submit(this,original,url,ref,title==null?"网页视频":title);Toast.makeText(this,"已识别，自动开始保存 ✦",Toast.LENGTH_LONG).show();finish();
     }
-    private void retry(){if(submitted)return;status.setText("正在使用本机登录状态重试…");worker.execute(()->{try{Resolver.resolve(original,()->closed);runOnUiThread(()->{if(closed)return;submitted=true;DownloadService.submit(this,original);finish();});}catch(Exception e){runOnUiThread(()->{if(!closed)status.setText(e.getMessage()==null?"暂时没有识别到视频，请播放后再试":e.getMessage());});}});}
+    private void retry(){if(submitted)return;status.setText("正在使用本机登录状态重试…");int quality=new Preferences(this).quality();worker.execute(()->{try{Resolver.resolve(original,()->closed,quality);runOnUiThread(()->{if(closed)return;submitted=true;DownloadService.submit(this,original);finish();});}catch(Exception e){runOnUiThread(()->{if(!closed)status.setText(e.getMessage()==null?"暂时没有识别到视频，请播放后再试":e.getMessage());});}});}
     @Override public void onBackPressed(){if(web.canGoBack())web.goBack();else super.onBackPressed();}
     @Override protected void onDestroy(){closed=true;handler.removeCallbacksAndMessages(null);worker.shutdownNow();if(web!=null){web.stopLoading();web.destroy();}super.onDestroy();}
 }

@@ -15,11 +15,20 @@ public final class Net {
     public record Page(String url,String body,String type) {}
     public static void check(Cancellation c) { if(Thread.currentThread().isInterrupted() || c.cancelled()) throw new CancellationException(); }
     public static HttpURLConnection open(String address,String referer,Cancellation cancel) throws IOException {
+        return open(address,referer,cancel,false);
+    }
+    static String biliWatchLocation(String address,Cancellation cancel) throws IOException {
+        HttpURLConnection connection=open(address,"https://www.bilibili.com/",cancel,true);
+        try { return connection.getURL().toString(); }
+        finally { connection.disconnect(); }
+    }
+    private static HttpURLConnection open(String address,String referer,Cancellation cancel,boolean stopAtBiliWatch) throws IOException {
         String current=address.startsWith("http://")?"https://"+address.substring(7):address;
         for(int i=0;i<9;i++) {
             check(cancel);
             if(!LinkInput.isWebUrl(current)) throw new IOException("跳转到了不支持的地址");
             HttpURLConnection conn=(HttpURLConnection)new URL(current).openConnection();
+            if(stopAtBiliWatch && LinkInput.isBiliWatchUrl(current)) return conn;
             conn.setInstanceFollowRedirects(false); conn.setConnectTimeout(15000); conn.setReadTimeout(15000);
             conn.setUseCaches(false);conn.setRequestProperty("Cache-Control","no-cache");
             conn.setRequestProperty("User-Agent",UA); conn.setRequestProperty("Accept","*/*"); conn.setRequestProperty("Accept-Encoding","identity");

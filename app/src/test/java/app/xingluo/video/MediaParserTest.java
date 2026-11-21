@@ -5,6 +5,42 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class MediaParserTest {
+    @Test public void bilibiliMp4FallbackKeeps1080Preference() {
+        for(String request:Resolver.biliFormats(80,true)) {
+            assertTrue(request.startsWith("fnval=0&qn=80&"));
+        }
+    }
+
+    @Test public void prefersResolutionToBitrateForDouyin() throws Exception {
+        var response = new JSONObject("""
+            {"video":{"bit_rate":[
+              {"bit_rate":4000000,"play_addr":{"width":480,"height":854,"url_list":["https://cdn.test/480"]}},
+              {"bit_rate":1800000,"play_addr":{"width":720,"height":1280,"url_list":["https://cdn.test/720"]}},
+              {"bit_rate":5000000,"play_addr":{"width":1080,"height":1920,"url_list":["https://cdn.test/1080"]}}
+            ]}}
+            """);
+        assertEquals("https://cdn.test/720", MediaParser.douyin(response,"https://www.douyin.com/",720).videoUrl);
+    }
+
+    @Test public void includesHigherResolutionMainDouyinAddressInSelection() throws Exception {
+        var response = new JSONObject("""
+            {"video":{"width":1080,"height":1920,"play_addr":{"url_list":["https://cdn.test/main"]},
+              "bit_rate":[{"bit_rate":4000000,"play_addr":{"width":480,"height":854,"url_list":["https://cdn.test/480"]}}]}}
+            """);
+        assertEquals("https://cdn.test/main", MediaParser.douyin(response,"https://www.douyin.com/",1080).videoUrl);
+        assertEquals("https://cdn.test/480", MediaParser.douyin(response,"https://www.douyin.com/",720).videoUrl);
+    }
+
+    @Test public void selectsVerticalBilibiliTrackByShortSide() throws Exception {
+        var response = new JSONObject("""
+            {"data":{"dash":{"video":[
+              {"width":720,"height":1280,"codecs":"avc1","bandwidth":1700000,"baseUrl":"https://cdn.test/720"},
+              {"width":360,"height":640,"codecs":"avc1","bandwidth":800000,"baseUrl":"https://cdn.test/360"}
+            ],"audio":[{"codecs":"mp4a","baseUrl":"https://cdn.test/audio"}]}}}
+            """);
+        assertEquals("https://cdn.test/720", MediaParser.bilibili(response,"t","https://www.bilibili.com/",720).videoUrl);
+    }
+
     @Test public void qualityPreferenceCapsBiliVideoTrack() throws Exception {
         JSONObject response=new JSONObject("{\"data\":{\"dash\":{\"video\":[{\"height\":1080,\"codecs\":\"avc1\",\"baseUrl\":\"https://cdn.test/1080\"},{\"height\":480,\"codecs\":\"avc1\",\"baseUrl\":\"https://cdn.test/480\"}],\"audio\":[{\"codecs\":\"mp4a\",\"baseUrl\":\"https://cdn.test/audio\"}]}}}");
         assertEquals("https://cdn.test/480",MediaParser.bilibili(response,"t","https://www.bilibili.com/",480).videoUrl);

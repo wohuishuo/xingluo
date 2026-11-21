@@ -4,6 +4,11 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class LinkInputTest {
+    @Test public void acceptsFullWidthKeyboardPunctuation() {
+        assertEquals("https://tube.tchncs.de/w/sFhdfdsN1dbgy41XqRawdH",
+                LinkInput.extract("https：／／tube。tchncs。de／w／sFhdfdsN1dbgy41XqRawdH"));
+    }
+
     @Test public void extractsUsersMixedShareText() {
         assertEquals("https://b23.tv/y7xiWGg", LinkInput.extract("【🥒若不是睦突然闯进我生活 & 睦睦的酒🥒【bilibilionly同人扶持计划】-哔哩哔哩】 https://b23.tv/y7xiWGg 。"));
     }

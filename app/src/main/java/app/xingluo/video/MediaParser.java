@@ -39,14 +39,21 @@ public final class MediaParser {
     }
     private static JSONObject bestTrack(JSONArray list,boolean video,int maxHeight) {
         if(list==null) return null;
-        JSONObject best=null; long score=-1;
+        JSONObject best=null;
+        int bestSize=0;
+        long bestBitrate=-1;
         for(int i=0;i<list.length();i++) {
             JSONObject o=list.optJSONObject(i); if(o==null || !LinkInput.isWebUrl(baseUrl(o))) continue;
             String codec=o.optString("codecs","").toLowerCase(Locale.ROOT);
-            if(video && (!codec.startsWith("avc") || o.optInt("height")>maxHeight)) continue;
+            if(video && !codec.startsWith("avc")) continue;
             if(!video && !codec.startsWith("mp4a")) continue;
-            long s=video?(long)o.optInt("height")*1_000_000+o.optLong("bandwidth"):o.optLong("bandwidth");
-            if(s>score) { score=s; best=o; }
+            int size=video?VideoQuality.shortSide(o.optInt("width"),o.optInt("height")):0;
+            long bitrate=o.optLong("bandwidth");
+            if(best==null || VideoQuality.better(size,bitrate,bestSize,bestBitrate,maxHeight)) {
+                best=o;
+                bestSize=size;
+                bestBitrate=bitrate;
+            }
         }
         return best;
     }
@@ -63,8 +70,7 @@ public final class MediaParser {
         if(root instanceof JSONObject obj) {
             JSONObject video=obj.optJSONObject("video");
             if(video!=null) {
-                JSONArray rates=video.optJSONArray("bit_rate");String chosen=null;long best=-1;
-                if(rates!=null)for(int i=0;i<rates.length();i++){JSONObject rate=rates.optJSONObject(i);if(rate==null)continue;JSONObject addr=rate.optJSONObject("play_addr");if(addr==null)continue;int w=addr.optInt("width"),h=addr.optInt("height"),edge=w>0&&h>0?Math.min(w,h):h;String candidate=urlFrom(addr);long score=rate.optLong("bit_rate",edge);if(candidate!=null&&edge>0&&edge<=maxHeight&&score>best){best=score;chosen=candidate;}}
+                String chosen=bestDouyinAddress(video,maxHeight);
                 if(chosen!=null)return new MediaPlan(cleanTitle(obj.optString("desc",obj.optString("title","抖音视频"))),chosen,null,ref);
                 for(String key:new String[]{"play_addr","playAddr","download_addr","downloadAddr"}) {
                     Object addr=video.opt(key); String u=urlFrom(addr);
@@ -77,6 +83,46 @@ public final class MediaParser {
             for(int i=0;i<list.length();i++) { MediaPlan p=searchVideo(list.opt(i),ref,depth+1,maxHeight); if(p!=null) return p; }
         }
         return null;
+    }
+    private static String bestDouyinAddress(JSONObject video,int preferred) {
+        String best=null;
+        int bestSize=0;
+        long bestBitrate=-1;
+        JSONArray rates=video.optJSONArray("bit_rate");
+        if(rates!=null) for(int i=0;i<rates.length();i++) {
+            JSONObject rate=rates.optJSONObject(i);
+            if(rate==null) continue;
+            JSONObject address=rate.optJSONObject("play_addr");
+            if(address==null) address=rate.optJSONObject("playAddr");
+            if(address==null) continue;
+            String candidate=urlFrom(address);
+            int size=VideoQuality.shortSide(address.optInt("width",rate.optInt("width")),
+                                            address.optInt("height",rate.optInt("height")));
+            long bitrate=rate.optLong("bit_rate");
+            if(candidate!=null && size>0 && VideoQuality.better(size,bitrate,bestSize,bestBitrate,preferred)) {
+                best=candidate;
+                bestSize=size;
+                bestBitrate=bitrate;
+            }
+        }
+        for(String key:new String[]{"play_addr","playAddr"}) {
+            JSONObject address=video.optJSONObject(key);
+            String candidate=urlFrom(video.opt(key));
+            if(candidate==null) continue;
+            int width=address==null?0:address.optInt("width");
+            int height=address==null?0:address.optInt("height");
+            if(width<=0 || height<=0) {
+                width=video.optInt("width");
+                height=video.optInt("height");
+            }
+            int size=VideoQuality.shortSide(width,height);
+            if(size>0 && VideoQuality.better(size,0,bestSize,bestBitrate,preferred)) {
+                best=candidate;
+                bestSize=size;
+                bestBitrate=0;
+            }
+        }
+        return best;
     }
     private static String urlFrom(Object addr) {
         if(addr instanceof String u && LinkInput.isWebUrl(u)) return u;
