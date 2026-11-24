@@ -53,6 +53,42 @@ The collection screen **我的收藏** shows progress and lets you cancel a task
 
 Native WeChat cards, WeChat-only pages and encrypted content are not directly supported. HLS, DRM, livestreams, membership bypass and batch downloading all parts are not supported. Availability depends on platform changes, login status, region and network conditions. Douyin support does not imply TikTok support.
 
+## Roadmap · Universal downloader
+
+> Proposed architecture and capabilities, not features already shipped in v1.2.0. See the current support table above.
+
+Keep one entry point: share or paste, select the intended work automatically, and save it.
+
+```mermaid
+flowchart TD
+  U["Share / Paste"] --> R["Unified resolver"]
+  R --> N["Native adapters"]
+  R --> Y["yt-dlp"]
+  R --> I["Image galleries"]
+  R --> W["Web / Cloud"]
+  N --> M["Resource model"]
+  Y --> M
+  I --> M
+  W --> M
+  A["Local sign-in"] -.-> R
+  M --> S["Auto-select / Confirm if needed"]
+  S --> Q["Concurrent resumable queue"]
+  Q --> H["HTTP / HLS / DASH"]
+  H --> F["Verify / Merge / Save"]
+  F --> B["Collection"]
+```
+
+| Resource | Planned scope |
+|---|---|
+| 🎬 Video | Bilibili, Douyin, PeerTube; Kuaishou, YouTube and more |
+| 🖼️ Images / galleries | Pixiv, Xiaohongshu, Douyin posts; intended artwork only |
+| 📁 Files | HTTP, shared files, resumable transfers |
+| ☁️ Cloud drives | Baidu, Quark and WebDAV, subject to authorization and testing |
+| 🌐 Web | Accessible media and non-DRM HLS/DASH |
+| 🎧 Extensions | Audio, subtitles; evaluate livestreams and BT later |
+
+[Architecture, upstream reuse and test plan (Chinese)](docs/universal-downloader-architecture.md)
+
 ## Frequently asked questions
 
 ### How do I change the download folder?
