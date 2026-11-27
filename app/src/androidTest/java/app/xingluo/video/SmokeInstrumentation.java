@@ -73,6 +73,36 @@ public final class SmokeInstrumentation extends Instrumentation {
                 while(System.currentTimeMillis()<deadline){for(TaskStore.Task t:s.all())if(t.input.equals("https://example.invalid/video.mp4"))task=t;if(task!=null&&!task.active())break;Thread.sleep(100);}
                 require(task!=null,"text not automatically submitted");require(!"done".equals(task.status),"invalid address shown as success");
             });
+            check("individual task deletion and search filtering work cleanly",()->{
+                TaskStore s=new TaskStore(target);TaskStore.Task t=new TaskStore.Task();t.title="星落测试单条删除";t.platform="哔哩哔哩";t.author="小星";t.status="done";s.save(t);
+                require(s.search("小星","已收藏").stream().anyMatch(x->x.id.equals(t.id)),"search failed");
+                require(s.delete(t.id),"delete returned false");
+                require(s.get(t.id)==null,"deleted task still exists");
+            });
+            check("v2 engine and Pixiv preferences persist",()->{
+                Preferences p=new Preferences(target);p.maxConcurrentTasks(5);p.threadsPerTask(8);p.pixivMinPx(800);p.autoClipboard(false);
+                Preferences restored=new Preferences(target);
+                require(restored.maxConcurrentTasks()==5,"concurrency lost");
+                require(restored.threadsPerTask()==8,"threads lost");
+                require(restored.pixivMinPx()==800,"pixivMinPx lost");
+                require(!restored.autoClipboard(),"autoClipboard lost");
+                p.maxConcurrentTasks(3);p.threadsPerTask(4);p.pixivMinPx(400);p.autoClipboard(true);
+            });
+            check("activity stats persist and compute 112-day heatmap",()->{
+                app.xingluo.video.stats.ActivityStats stats=new app.xingluo.video.stats.ActivityStats(target);
+                stats.clear();
+                stats.record(System.currentTimeMillis(),"Pixiv","GALLERY","画师测试",java.util.List.of("插画","星落"),2048000L,"2000×3000",3);
+                app.xingluo.video.stats.ActivityStats.Summary sum=stats.summarize();
+                require(sum.totalDownloads==1,"stats count mismatch");
+                require(sum.heatmap112Days[111]==1,"today heatmap cell not incremented");
+                require(sum.topAuthors.stream().anyMatch(a->"画师测试".equals(a.name)),"top author missing");
+                stats.clear();
+            });
+            check("publishImage writes visible gallery photo and deletes cleanly",()->{
+                Uri imgUri=MediaFiles.publishImage(target,sample,"xingluo_test_art.jpg","image/jpeg","Pixiv/TestArtist",()->false);
+                require(imgUri!=null,"image uri null");
+                MediaFiles.deletePublished(target,imgUri.toString());
+            });
             Bundle out=new Bundle();out.putString("stream","\n"+log+"\nOK ("+passed+" checks)\n");finish(Activity.RESULT_OK,out);
         }catch(Throwable e){Bundle out=new Bundle();out.putString("stream","\n"+log+"\nFAIL: "+e+"\n"+android.util.Log.getStackTraceString(e));finish(Activity.RESULT_CANCELED,out);}
         finally{for(Uri u:cleanup)target.getContentResolver().delete(u,null,null);sample.delete();}

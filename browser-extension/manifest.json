@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "星落 Xingluo Bridge",
+  "short_name": "星落",
+  "version": "1.0.0",
+  "description": "一键识别网页视频、图集与网盘磁力链接，发送至「星落」App 下载保存。",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "contextMenus"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "发送到星落下载 ✦"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "xingluo-bridge@xingluo.app",
+      "strict_min_version": "121.0"
+    },
+    "gecko_android": {
+      "strict_min_version": "121.0"
+    }
+  }
+}
